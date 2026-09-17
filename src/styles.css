@@ -387,6 +387,98 @@ button.mini.danger:hover { color: var(--error); border-color: var(--error); }
 }
 .settings-input { font-family: ui-monospace, monospace; }
 
+/* ---------- Layout preview ---------- */
+.layout-preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background:
+    linear-gradient(rgba(110, 161, 255, .05) 1px, transparent 1px) 0 0 / 100% 25%,
+    linear-gradient(90deg, rgba(110, 161, 255, .05) 1px, transparent 1px) 0 0 / 25% 100%,
+    linear-gradient(180deg, #0a0e18, #0d1424);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.safe-rect {
+  position: absolute;
+  inset: 10%;
+  border: 1px dashed rgba(63, 207, 142, .55);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.safe-tag {
+  position: absolute;
+  top: calc(10% + 3px);
+  left: calc(10% + 6px);
+  font-size: 9px;
+  letter-spacing: .08em;
+  color: rgba(63, 207, 142, .85);
+  pointer-events: none;
+}
+.preview-cue {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 2px;
+  background: rgba(79, 140, 255, .16);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.preview-cue.outside {
+  border-color: var(--error);
+  background: rgba(255, 93, 108, .14);
+  box-shadow: 0 0 8px rgba(255, 93, 108, .45);
+}
+.preview-cue-line {
+  font-size: 10px;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-readout { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.preview-err { color: var(--error); }
+.preview-warn { color: var(--warn); }
+
+/* ---------- Layout fields ---------- */
+.layout-grid {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 6px 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.layout-grid > span { color: var(--muted); }
+.layout-input, .layout-select {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+}
+.layout-input.bad, .layout-select.bad { border-color: var(--error); }
+.layout-errors {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--error);
+}
+
 /* ---------- Issues ---------- */
 .badge {
   font-size: 11px;

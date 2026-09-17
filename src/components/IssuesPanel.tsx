@@ -5,7 +5,7 @@ interface Props {
   onJump: (issue: Issue) => void;
 }
 
-/** 问题清单：错误（重叠/非法时间）与警告（间隔过小/时长不足）分组展示 */
+/** 问题清单：错误（重叠/非法时间）与警告（间隔过小/时长不足/布局问题）分组展示 */
 export default function IssuesPanel({ issues, onJump }: Props) {
   const errors = issues.filter((i) => i.severity === 'error');
   const warnings = issues.filter((i) => i.severity === 'warning');
@@ -21,7 +21,7 @@ export default function IssuesPanel({ issues, onJump }: Props) {
         </span>
       </h2>
       {issues.length === 0 ? (
-        <p className="muted small">当前没有时序问题，可以放心导出。</p>
+        <p className="muted small">当前没有时序或布局问题，可以放心导出。</p>
       ) : (
         <ul className="issue-list">
           {[...errors, ...warnings].map((i) => (

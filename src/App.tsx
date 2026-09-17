@@ -10,6 +10,7 @@ import IssuesPanel from './components/IssuesPanel';
 import SettingsPanel from './components/SettingsPanel';
 import CueList from './components/CueList';
 import ImportModal from './components/ImportModal';
+import LayoutPreview from './components/LayoutPreview';
 
 export default function App() {
   const initial = useMemo(() => parseVTT(SAMPLE_VTT), []);
@@ -29,6 +30,8 @@ export default function App() {
     [cues],
   );
   const issues = useMemo(() => detectIssues(cues, settings), [cues, settings]);
+  // 时间轴上的区间标注只反映时序问题；布局问题归入问题清单与布局预览
+  const timingIssues = useMemo(() => issues.filter((i) => i.kind !== 'layout'), [issues]);
   const errorCount = issues.filter((i) => i.severity === 'error').length;
 
   useEffect(() => {
@@ -118,7 +121,7 @@ export default function App() {
           <span className="logo">🎞️</span>
           <div>
             <h1>WebVTT 字幕时序修复器</h1>
-            <span className="muted small">本地运行 · 拖动传播 · 锁定保护 · 可逆调整</span>
+            <span className="muted small">本地运行 · 拖动传播 · 锁定保护 · 布局预览</span>
           </div>
         </div>
         <div className="header-actions">
@@ -138,7 +141,7 @@ export default function App() {
             settings={settings}
             selectedId={selectedId}
             conflict={conflict}
-            issues={issues}
+            issues={timingIssues}
             pps={pps}
             onPps={setPps}
             onSelect={setSelectedId}
@@ -174,6 +177,7 @@ export default function App() {
 
         <aside className="side-col">
           <SettingsPanel settings={settings} onChange={setSettings} />
+          <LayoutPreview cue={selected} />
           <Inspector
             cue={selected}
             index={selectedIndex}

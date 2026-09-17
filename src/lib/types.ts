@@ -17,7 +17,7 @@ export interface Settings {
   minGap: number;
 }
 
-export type IssueKind = 'overlap' | 'gap' | 'duration' | 'negative';
+export type IssueKind = 'overlap' | 'gap' | 'duration' | 'negative' | 'layout';
 export type Severity = 'error' | 'warning';
 
 export interface Issue {

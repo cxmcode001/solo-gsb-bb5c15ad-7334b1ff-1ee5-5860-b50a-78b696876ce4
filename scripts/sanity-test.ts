@@ -2,7 +2,16 @@ import assert from 'node:assert';
 import { parseTimecode, formatTimecode } from '../src/lib/time';
 import { parseVTT, serializeVTT } from '../src/lib/vtt';
 import { applyDrag } from '../src/lib/solver';
-import type { Cue } from '../src/lib/types';
+import { detectIssues } from '../src/lib/issues';
+import {
+  parseCueSettings,
+  serializeCueSettings,
+  getCueSetting,
+  updateCueSetting,
+  validateLayoutValue,
+  analyzeCueLayout,
+} from '../src/lib/layout';
+import type { Cue, Settings } from '../src/lib/types';
 
 let passed = 0;
 function ok(name: string) { passed++; console.log('  ✓', name); }
@@ -211,6 +220,109 @@ const GAP = 0.1, MIN = 1;
   applyDrag({ cues: cs, targetId: 'a', op: 'move', desired: 9, minDuration: MIN, minGap: GAP });
   assert.deepStrictEqual(cs, snapshot);
   ok('输入数组不被原地修改');
+}
+
+// ---------- 画面布局：cue 设置编辑 ----------
+
+// 13. 编辑四个布局字段时保留未知设置的原始顺序与内容
+{
+  const src = 'vertical:rl line:10% foo:bar position:20%';
+  // 就地替换，位置不变
+  assert.strictEqual(updateCueSetting(src, 'line', '90%'), 'vertical:rl line:90% foo:bar position:20%');
+  // 不存在的字段追加到末尾
+  assert.strictEqual(updateCueSetting(src, 'size', '80%'), 'vertical:rl line:10% foo:bar position:20% size:80%');
+  // 置空即删除，其它设置原样保留
+  assert.strictEqual(updateCueSetting(src, 'position', ''), 'vertical:rl line:10% foo:bar');
+  // 同名重复设置：替换第一个并移除后续重复项
+  assert.strictEqual(updateCueSetting('line:10% line:20% align:left', 'line', '50%'), 'line:50% align:left');
+  // 空设置串上新增 / 删除唯一字段
+  assert.strictEqual(updateCueSetting('', 'align', 'center'), 'align:center');
+  assert.strictEqual(updateCueSetting('align:center', 'align', ''), '');
+  // 读取与往返
+  assert.strictEqual(getCueSetting(src, 'line'), '10%');
+  assert.strictEqual(getCueSetting(src, 'size'), '');
+  assert.strictEqual(serializeCueSettings(parseCueSettings(src)), src);
+  ok('布局字段编辑保留未知设置的顺序与内容');
+}
+
+// 14. 布局字段取值校验
+{
+  assert.strictEqual(validateLayoutValue('line', '90%'), null);
+  assert.strictEqual(validateLayoutValue('line', '12'), null);
+  assert.strictEqual(validateLayoutValue('line', '-1,end'), null);
+  assert.ok(validateLayoutValue('line', '120%') !== null);
+  assert.ok(validateLayoutValue('line', 'abc') !== null);
+  assert.strictEqual(validateLayoutValue('position', '50%,line-right'), null);
+  assert.ok(validateLayoutValue('position', '50') !== null);
+  assert.strictEqual(validateLayoutValue('size', '80%'), null);
+  assert.ok(validateLayoutValue('size', '0.5') !== null);
+  assert.strictEqual(validateLayoutValue('align', 'center'), null);
+  assert.ok(validateLayoutValue('align', 'middle') !== null);
+  ok('布局字段取值校验');
+}
+
+// 15. 字幕框几何与安全区检测
+{
+  // 显式 size：按 cue 框计算；line:90%,end 表示框底对齐 90%
+  const a = analyzeCueLayout({ settings: 'line:90%,end position:50% size:80% align:center', text: '测试' });
+  assert.ok(Math.abs(a.left - 10) < 1e-6 && Math.abs(a.width - 80) < 1e-6);
+  assert.ok(Math.abs(a.top - (90 - 5.33)) < 1e-6 && Math.abs(a.height - 5.33) < 1e-6);
+  assert.strictEqual(a.errors.length, 0);
+  assert.strictEqual(a.outsideSafe, false); // 底边 90%，在容差内
+
+  // line 默认 start 对齐：line:95% => 框顶在 95%，底边越界
+  const b = analyzeCueLayout({ settings: 'line:95%', text: '测试文本' });
+  assert.strictEqual(b.hasGeometry, true);
+  assert.strictEqual(b.outsideSafe, true);
+  assert.ok(b.safeViolations.some((v) => v.startsWith('下侧')));
+
+  // position 对齐缺省时按 align 推导：align:right => 框右缘对齐 position
+  const c = analyzeCueLayout({ settings: 'position:80% size:40% align:right', text: 'x' });
+  assert.ok(Math.abs(c.left - 40) < 1e-6 && Math.abs(c.width - 40) < 1e-6);
+
+  // 无显式几何 => 不做安全区判定；非法 align 进入 errors
+  const d = analyzeCueLayout({ settings: 'align:middle', text: 'x' });
+  assert.strictEqual(d.hasGeometry, false);
+  assert.strictEqual(d.errors.length, 1);
+  ok('字幕框几何与安全区检测');
+}
+
+// 16. 问题清单包含布局问题（非法值 + 超出安全区），且为警告、可定位到片段
+{
+  const cs: Cue[] = [
+    { id: 'x', identifier: '', start: 0, end: 2, text: '你好', settings: 'align:middle line:95%', locked: false },
+    { id: 'y', identifier: '', start: 3, end: 5, text: '世界', settings: '', locked: false },
+  ];
+  const st: Settings = { minDuration: 1, minGap: 0.1 };
+  const iss = detectIssues(cs, st);
+  const layout = iss.filter((i) => i.kind === 'layout');
+  assert.strictEqual(layout.length, 2);
+  assert.ok(layout.every((i) => i.severity === 'warning'));
+  assert.ok(layout.every((i) => i.cueIds[0] === 'x'));
+  assert.ok(layout.some((i) => i.message.includes('非法')));
+  assert.ok(layout.some((i) => i.message.includes('安全区')));
+  // 无布局问题的片段不产生 layout 条目
+  assert.ok(!layout.some((i) => i.cueIds[0] === 'y'));
+  ok('问题清单包含布局非法值与安全区越界');
+}
+
+// 17. 布局编辑后导出：未知 cue 设置顺序与内容保留
+{
+  const v = `WEBVTT
+
+1
+00:00.000 --> 00:02.000 vertical:rl line:10% foo:bar
+你好
+`;
+  const p = parseVTT(v);
+  assert.ok(!p.error, p.error);
+  const c = p.cues[0];
+  const updated = updateCueSetting(c.settings, 'position', '40%');
+  const out = serializeVTT([{ ...c, settings: updated }], p.preamble);
+  assert.ok(out.includes('vertical:rl line:10% foo:bar position:40%'));
+  // 时序导出行为不变
+  assert.ok(out.includes('00:00.000 --> 00:02.000'));
+  ok('导出时未知 cue 设置顺序与内容保留');
 }
 
 console.log(`\n全部 ${passed} 组测试通过 ✅`);

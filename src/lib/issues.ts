@@ -1,4 +1,5 @@
 import type { Cue, Issue, Settings } from './types';
+import { analyzeCueLayout } from './layout';
 
 /**
  * 扫描当前全部 cue，生成问题清单：
@@ -6,6 +7,7 @@ import type { Cue, Issue, Settings } from './types';
  *  - duration：短于最小时长
  *  - overlap：相邻片段重叠（错误）
  *  - gap：相邻片段间隔小于最小间隔（警告）
+ *  - layout：布局设置（line/position/size/align）非法，或字幕框超出 10% 安全区（警告）
  * 检测基于按 start 排序后的相邻对。
  */
 export function detectIssues(cuesInput: Cue[], settings: Settings): Issue[] {
@@ -14,6 +16,31 @@ export function detectIssues(cuesInput: Cue[], settings: Settings): Issue[] {
 
   for (let i = 0; i < cues.length; i++) {
     const c = cues[i];
+    const range: [number, number] = [Math.max(0, c.start), Math.max(c.end, c.start)];
+
+    // 画面布局：非法设置值 / 字幕框超出 10% 安全区
+    const layout = analyzeCueLayout(c);
+    layout.errors.forEach((msg, j) => {
+      issues.push({
+        key: `layout-${c.id}-${j}`,
+        kind: 'layout',
+        severity: 'warning',
+        message: `片段 #${i + 1} ${msg}。`,
+        cueIds: [c.id],
+        range,
+      });
+    });
+    if (layout.hasGeometry && layout.outsideSafe) {
+      issues.push({
+        key: `safe-${c.id}`,
+        kind: 'layout',
+        severity: 'warning',
+        message: `片段 #${i + 1} 字幕框超出 10% 安全区（${layout.safeViolations.join('；')}）。`,
+        cueIds: [c.id],
+        range,
+      });
+    }
+
     if (c.start < -0.0005 || c.end < -0.0005 || c.end <= c.start) {
       issues.push({
         key: `neg-${c.id}`,
