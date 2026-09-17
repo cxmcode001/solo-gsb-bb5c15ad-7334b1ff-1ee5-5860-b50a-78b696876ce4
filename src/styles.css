@@ -387,6 +387,102 @@ button.mini.danger:hover { color: var(--error); border-color: var(--error); }
 }
 .settings-input { font-family: ui-monospace, monospace; }
 
+/* ---------- Layout preview ---------- */
+.preview-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(180deg, #0b101d, #0d1424);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.safe-area {
+  position: absolute;
+  left: 10%;
+  top: 10%;
+  width: 80%;
+  height: 80%;
+  border: 1px dashed rgba(255, 182, 72, .55);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.safe-area-label {
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  font-size: 10px;
+  color: rgba(255, 182, 72, .85);
+}
+.preview-cue-box {
+  position: absolute;
+  display: flex;
+  align-items: flex-end;
+  border: 1px solid var(--accent);
+  background: rgba(79, 140, 255, .16);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 2px;
+  min-height: 2px;
+}
+.preview-cue-box.outside { border-style: dashed; }
+.preview-cue-box.invalid {
+  border-color: var(--error);
+  background: rgba(255, 93, 108, .12);
+}
+.preview-cue-text {
+  width: 100%;
+  padding: 0 2px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+  white-space: pre-line;
+  overflow: hidden;
+}
+.preview-empty, .preview-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-note {
+  font-size: 12px;
+  color: var(--warn);
+}
+.preview-msg { margin: 8px 0 0; font-size: 12px; }
+.preview-msg.error { color: var(--error); }
+.preview-msg.warn { color: var(--warn); }
+
+/* ---------- Inspector 布局控件 ---------- */
+.layout-grid {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 6px 8px;
+  align-items: center;
+  font-size: 12.5px;
+}
+.layout-grid > span {
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+.layout-input, .layout-select {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+}
+.layout-input.bad, .layout-select.bad { border-color: var(--error); }
+.layout-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--error);
+}
+
 /* ---------- Issues ---------- */
 .badge {
   font-size: 11px;

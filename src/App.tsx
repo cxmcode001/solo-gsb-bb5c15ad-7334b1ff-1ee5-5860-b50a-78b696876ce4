@@ -10,6 +10,7 @@ import IssuesPanel from './components/IssuesPanel';
 import SettingsPanel from './components/SettingsPanel';
 import CueList from './components/CueList';
 import ImportModal from './components/ImportModal';
+import LayoutPreview from './components/LayoutPreview';
 
 export default function App() {
   const initial = useMemo(() => parseVTT(SAMPLE_VTT), []);
@@ -95,7 +96,7 @@ export default function App() {
       return;
     }
     if (errorCount > 0) {
-      setToast(`仍有 ${errorCount} 个错误（重叠/非法时间），已按当前内容导出，请先确认。`);
+      setToast(`仍有 ${errorCount} 个错误（重叠/非法时间/非法布局），已按当前内容导出，请先确认。`);
     } else {
       setToast('已导出 WebVTT 文件。');
     }
@@ -174,6 +175,7 @@ export default function App() {
 
         <aside className="side-col">
           <SettingsPanel settings={settings} onChange={setSettings} />
+          <LayoutPreview cue={selected} index={selectedIndex} />
           <Inspector
             cue={selected}
             index={selectedIndex}

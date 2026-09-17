@@ -8,6 +8,9 @@ const LANE_GAP = 6;
 const RULER_HEIGHT = 28;
 const EDGE_HIT = 7;
 
+/** 在时间轴上标红/标黄的问题类型（布局问题不占用时间轴，仅出现在问题清单） */
+const TIMELINE_ISSUE_KINDS = new Set(['overlap', 'gap', 'duration', 'negative']);
+
 interface DragState {
   op: DragOp;
   cueId: string;
@@ -89,8 +92,10 @@ export default function Timeline(props: Props) {
   for (let t = 0; t <= extent + 1e-6; t += step) ticks.push(t);
 
   const issueRanges = useMemo(() => {
-    // 同一区间的多个问题合并显示
-    return issues.map((i) => ({ key: i.key, range: i.range, severity: i.severity }));
+    // 同一区间的多个问题合并显示；仅时序类问题标注在时间轴上
+    return issues
+      .filter((i) => TIMELINE_ISSUE_KINDS.has(i.kind))
+      .map((i) => ({ key: i.key, range: i.range, severity: i.severity }));
   }, [issues]);
 
   useEffect(() => {

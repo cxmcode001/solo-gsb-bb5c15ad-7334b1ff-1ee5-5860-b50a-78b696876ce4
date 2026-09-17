@@ -17,7 +17,11 @@ export interface Settings {
   minGap: number;
 }
 
-export type IssueKind = 'overlap' | 'gap' | 'duration' | 'negative';
+export type IssueKind =
+  // 时序问题
+  | 'overlap' | 'gap' | 'duration' | 'negative'
+  // 画面布局问题
+  | 'layout' | 'safearea';
 export type Severity = 'error' | 'warning';
 
 export interface Issue {

@@ -2,6 +2,15 @@ import assert from 'node:assert';
 import { parseTimecode, formatTimecode } from '../src/lib/time';
 import { parseVTT, serializeVTT } from '../src/lib/vtt';
 import { applyDrag } from '../src/lib/solver';
+import { detectIssues } from '../src/lib/issues';
+import {
+  computeCueBox,
+  getLayoutRaw,
+  hasLayoutSettings,
+  parseLayoutSettings,
+  safeAreaViolations,
+  updateCueSettings,
+} from '../src/lib/layout';
 import type { Cue } from '../src/lib/types';
 
 let passed = 0;
@@ -211,6 +220,106 @@ const GAP = 0.1, MIN = 1;
   applyDrag({ cues: cs, targetId: 'a', op: 'move', desired: 9, minDuration: MIN, minGap: GAP });
   assert.deepStrictEqual(cs, snapshot);
   ok('输入数组不被原地修改');
+}
+
+// ---------- 画面布局 ----------
+function mkc(id: string, s: number, e: number, settings: string, text = '一行字幕'): Cue {
+  return { id, identifier: '', start: s, end: e, text, settings, locked: false };
+}
+
+// 1. 合法设置解析（align:middle 归一化为 center）
+{
+  const p = parseLayoutSettings('line:90% position:50% align:middle');
+  assert.strictEqual(p.errors.length, 0);
+  assert.strictEqual(p.layout.line?.percent, 90);
+  assert.strictEqual(p.layout.position?.percent, 50);
+  assert.strictEqual(p.layout.align, 'center');
+  const p2 = parseLayoutSettings('line:-1 position:20%,line-left size:60% align:end');
+  assert.strictEqual(p2.errors.length, 0);
+  assert.strictEqual(p2.layout.line?.lineNumber, -1);
+  assert.strictEqual(p2.layout.position?.align, 'line-left');
+  assert.strictEqual(p2.layout.size, 60);
+  assert.strictEqual(p2.layout.align, 'end');
+  ok('布局设置解析：百分比/行号/对齐');
+}
+
+// 2. 非法值逐项报告，未知字段不参与也不报错
+{
+  const p = parseLayoutSettings('line:120% size:abc position:50%,middle align:top vertical:rl foo:bar');
+  assert.strictEqual(p.errors.length, 4);
+  assert.deepStrictEqual(p.errors.map((e) => e.key), ['line', 'size', 'position', 'align']);
+  assert.strictEqual(p.layout.line, undefined); // 非法字段按未设置处理
+  assert.strictEqual(hasLayoutSettings('vertical:rl foo:bar'), false);
+  assert.strictEqual(hasLayoutSettings('vertical:rl line:90%'), true);
+  ok('非法布局值检测，未知字段忽略');
+}
+
+// 3. updateCueSettings 保留未知设置的原始顺序与内容
+{
+  const s0 = 'vertical:rl line:10% foo:bar position:20%';
+  assert.strictEqual(updateCueSettings(s0, 'line', '90%'), 'vertical:rl line:90% foo:bar position:20%');
+  assert.strictEqual(updateCueSettings(s0, 'align', 'end'), 'vertical:rl line:10% foo:bar position:20% align:end');
+  assert.strictEqual(updateCueSettings(s0, 'line', ''), 'vertical:rl foo:bar position:20%');
+  assert.strictEqual(updateCueSettings('', 'size', '60%'), 'size:60%');
+  assert.strictEqual(getLayoutRaw(s0, 'position'), '20%');
+  assert.strictEqual(getLayoutRaw(s0, 'align'), '');
+  ok('更新布局字段时保留未知设置顺序与内容');
+}
+
+// 4. 字幕框计算与安全区
+{
+  // line:90% position:50% align:middle，1 行：宽 100%，左 0，顶 90，高 5.33
+  const a = mkc('a', 0, 2, 'line:90% position:50% align:middle');
+  const boxA = computeCueBox(a, parseLayoutSettings(a.settings).layout);
+  assert.ok(Math.abs(boxA.left - 0) < 1e-6 && Math.abs(boxA.top - 90) < 1e-6);
+  assert.ok(Math.abs(boxA.width - 100) < 1e-6 && Math.abs(boxA.height - 5.33) < 1e-6);
+  assert.deepStrictEqual(safeAreaViolations(boxA), ['左', '右', '下']);
+
+  // 安全区内的框：line:50% position:50%,center size:60%
+  const b = mkc('b', 0, 2, 'line:50% position:50%,center size:60%');
+  const boxB = computeCueBox(b, parseLayoutSettings(b.settings).layout);
+  assert.deepStrictEqual(safeAreaViolations(boxB), []);
+
+  // align:right 推导 position 对齐为 line-right：右缘锚在 80%
+  const c = mkc('c', 0, 2, 'position:80% align:right size:40%');
+  const boxC = computeCueBox(c, parseLayoutSettings(c.settings).layout);
+  assert.ok(Math.abs(boxC.left - 40) < 1e-6);
+  ok('字幕框计算与 10% 安全区检测');
+}
+
+// 5. 布局问题进入问题清单，点击可定位（cueIds 指向对应片段）
+{
+  const cues = [
+    mkc('k1', 0, 2, 'line:90% position:50% align:middle'),
+    mkc('k2', 3, 5, 'size:120%'),
+    mkc('k3', 6, 8, ''), // 无设置：不产生布局问题
+  ];
+  const iss = detectIssues(cues, { minDuration: 1, minGap: 0.1 });
+  const safe = iss.find((i) => i.kind === 'safearea');
+  const layout = iss.find((i) => i.kind === 'layout');
+  assert.ok(safe && safe.severity === 'warning' && safe.cueIds[0] === 'k1');
+  assert.ok(layout && layout.severity === 'error' && layout.cueIds[0] === 'k2');
+  assert.ok(!iss.some((i) => i.cueIds.includes('k3')));
+  ok('问题清单包含安全区警告与非法布局错误');
+}
+
+// 6. 修改布局字段后导出，未知设置与时序行为不受影响
+{
+  const src = `WEBVTT
+
+1
+00:00.000 --> 00:02.500 vertical:rl line:10% foo:bar align:start
+第一行
+`;
+  const parsed = parseVTT(src);
+  assert.ok(!parsed.error, parsed.error);
+  const cue = parsed.cues[0];
+  cue.settings = updateCueSettings(cue.settings, 'align', 'end');
+  cue.settings = updateCueSettings(cue.settings, 'size', '60%');
+  const out = serializeVTT(parsed.cues, parsed.preamble);
+  assert.ok(out.includes('vertical:rl line:10% foo:bar align:end size:60%'));
+  assert.ok(out.includes('00:00.000 --> 00:02.500'));
+  ok('布局编辑后导出保留未知设置与时序');
 }
 
 console.log(`\n全部 ${passed} 组测试通过 ✅`);

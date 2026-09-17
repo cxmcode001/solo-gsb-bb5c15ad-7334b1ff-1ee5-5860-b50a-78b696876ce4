@@ -1,12 +1,17 @@
 import type { Cue, Issue, Settings } from './types';
+import { computeCueBox, hasLayoutSettings, parseLayoutSettings, safeAreaViolations } from './layout';
 
 /**
  * 扫描当前全部 cue，生成问题清单：
+ * 时序：
  *  - negative：开始/结束时间非法
  *  - duration：短于最小时长
  *  - overlap：相邻片段重叠（错误）
  *  - gap：相邻片段间隔小于最小间隔（警告）
- * 检测基于按 start 排序后的相邻对。
+ * 画面布局：
+ *  - layout：line / position / size / align 设置非法（错误）
+ *  - safearea：字幕框越出 10% 安全区（警告，仅检测显式设置了布局字段的片段）
+ * 时序检测基于按 start 排序后的相邻对。
  */
 export function detectIssues(cuesInput: Cue[], settings: Settings): Issue[] {
   const issues: Issue[] = [];
@@ -61,6 +66,37 @@ export function detectIssues(cuesInput: Cue[], settings: Settings): Issue[] {
         cueIds: [a.id, b.id],
         range: [a.end, b.start],
       });
+    }
+  }
+
+  // 画面布局检测：非法布局值（错误）与字幕框越出 10% 安全区（警告）
+  for (let i = 0; i < cues.length; i++) {
+    const c = cues[i];
+    if (!c.settings.trim()) continue;
+    const parsed = parseLayoutSettings(c.settings);
+    const range: [number, number] = [Math.max(0, c.start), Math.max(c.end, c.start)];
+    if (parsed.errors.length > 0) {
+      issues.push({
+        key: `layout-${c.id}`,
+        kind: 'layout',
+        severity: 'error',
+        message: `片段 #${i + 1} 的布局设置非法：${parsed.errors.map((e) => `${e.key}:"${e.raw}"（${e.reason}）`).join('；')}。`,
+        cueIds: [c.id],
+        range,
+      });
+    }
+    if (hasLayoutSettings(c.settings)) {
+      const violations = safeAreaViolations(computeCueBox(c, parsed.layout));
+      if (violations.length > 0) {
+        issues.push({
+          key: `safe-${c.id}`,
+          kind: 'safearea',
+          severity: 'warning',
+          message: `片段 #${i + 1} 的字幕框越出 10% 安全区（${violations.join('、')}侧）。`,
+          cueIds: [c.id],
+          range,
+        });
+      }
     }
   }
 
